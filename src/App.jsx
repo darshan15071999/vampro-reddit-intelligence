@@ -250,7 +250,7 @@ const App = () => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // --- SAAS CONFIGURATION STATE ---
-  const [workspace, setWorkspace] = useState({ name: "My Workspace", createdAt: new Date().toISOString() });
+  const [workspace, setWorkspace] = useState({ name: "Beta version can have inconsistencies, re-verify data", createdAt: new Date().toISOString() });
   const [brandConfig, setBrandConfig] = useState({
     primaryBrand: "",
     keywords: [],
@@ -1012,12 +1012,26 @@ const App = () => {
 
       {/* Sidebar */}
       <aside className={`w-64 border-r flex flex-col flex-shrink-0 relative ${theme === 'dark' ? 'bg-[#0a0a0a] border-white/10' : 'bg-white border-slate-200'}`}>
-        <div className="absolute inset-0 bg-gradient-to-b from-indigo-900/5 to-transparent pointer-events-none"></div>
         <div className={`p-6 border-b relative z-10 ${theme === 'dark' ? 'border-white/5' : 'border-slate-100'}`}>
           <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-500 to-blue-500 bg-clip-text text-transparent flex items-center drop-shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-            <Icons.Database className="mr-2 text-indigo-500" style={{ width: 24, height: 24 }} />
-            AI Citation Intel
+            <img
+              src="favicon.png"
+              alt="SignalScope"
+              className="mr-2"
+              style={{ width: 24, height: 24 }}
+            />
+            SignalScope
           </h1>
+
+          <span
+            className={`ml-25 px-3 py-0.5 rounded-full text-[10px] font-medium ${
+              theme === 'dark'
+                ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/20'
+                : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+          }`}
+       >
+           Beta v1.0
+          </span>
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto relative z-10 custom-scrollbar">
           <div className={`text-xs font-semibold uppercase tracking-wider mb-3 px-2 ${theme === 'dark' ? 'text-gray-500' : 'text-slate-400'}`}>Analytics</div>
@@ -1056,7 +1070,7 @@ const App = () => {
                 {navItems.find(i => i.id === activeTab)?.label}
               </h2>
               <p className={`mt-1 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>
-                {workspace.name} • Primary Brand: <span className="font-medium text-indigo-500">{brandConfig.primaryBrand}</span>
+                {workspace.name} <span className="font-medium text-indigo-500">{brandConfig.primaryBrand}</span>
               </p>
             </div>
 
@@ -1280,7 +1294,7 @@ const App = () => {
                             <src.icon className={`mr-2 ${src.color}`} style={{ width: 18, height: 18 }} />
                             <h5 className="font-semibold text-white">{src.name}</h5>
                           </div>
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500 bg-white/5 self-start px-2 py-1 rounded">Architecture Ready</span>
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500 bg-white/5 self-start px-2 py-1 rounded">Not available in beta</span>
                         </div>
                       ))}
                     </div>
