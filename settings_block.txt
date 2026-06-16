@@ -1,0 +1,63 @@
+activeTab === 'settings' && (
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-6 shadow-xl">
+                                <h3 className="text-xl font-semibold text-white mb-6">Architecture & Settings</h3>
+                                {error && <p className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">{error}</p>}
+
+                                <div className="max-w-2xl space-y-8">
+                                    <div className="p-5 border border-white/10 rounded-lg bg-black/30">
+                                        <h4 className="text-md font-medium text-white mb-4">Tracked Profiles</h4>
+                                        <div className="flex flex-wrap gap-2 mb-5">
+                                            {profiles.map(p => (
+                                                <div key={p} onClick={() => setUsername(p)} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm cursor-pointer border transition-colors ${username === p ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}>
+                                                    <Icons.User style={{ width: 14, height: 14 }} /> {p}
+                                                    {profiles.length > 1 && <button onClick={(e) => { e.stopPropagation(); const newProfiles = profiles.filter(x => x !== p); setProfiles(newProfiles); if (username === p) setUsername(newProfiles[0]); }} className="ml-2 hover:text-red-400 text-gray-500 transition-colors">&times;</button>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-3">
+                                            <input type="text" value={newProfileInput} onChange={(e) => setNewProfileInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddProfile()} placeholder="Add a Reddit username..." className="flex-1 bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors" />
+                                            <button onClick={handleAddProfile} disabled={!newProfileInput.trim()} className="bg-indigo-500/20 text-indigo-400 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-500/30 transition-colors disabled:opacity-50">Add Profile</button>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-5 border border-white/10 rounded-lg bg-black/30">
+                                        <h4 className="text-md font-medium text-white mb-4">Data Ingestion Settings</h4>
+                                        <label className="block text-sm font-medium text-gray-400 mb-2">Live API Provider</label>
+                                        <select value={dataSource} onChange={(e) => { setDataSource(e.target.value); setError(null); }} className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors mb-4">
+                                            <option value="manual">Manual Raw JSON (100% Reliable Bypass)</option><option value="reddit">Reddit (via Proxy - May get Rate Limited)</option><option value="hackernews">Hacker News (Native CORS)</option>
+                                        </select>
+
+                                        {dataSource === 'manual' && (
+                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <label className="block text-sm font-medium text-indigo-400 mb-2">Bypass Reddit Proxy Blocks</label>
+                                                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4 mb-4 text-sm text-gray-300">
+                                                    <p className="mb-2">1. Open a new tab and go to exactly this URL:</p>
+                                                    <a href={`https://www.reddit.com/user/${username}/overview.json`} target="_blank" rel="noreferrer" className="text-indigo-400 font-mono bg-black/50 px-2 py-1 rounded inline-block hover:underline break-all">https://www.reddit.com/user/{username}/overview.json</a>
+                                                    <p className="mt-3">2. Copy ALL the text on that page (Ctrl+A / Cmd+A) and paste it below.</p>
+                                                </div>
+                                                <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} className="w-full h-48 bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono text-xs" placeholder='Paste raw JSON starting with {"kind": "Listing", "data": ...}'></textarea>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <button onClick={() => { fetchRedditData(true); setActiveTab('dashboard'); }} className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full sm:w-auto">Save & Re-Index Data</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* --- DYNAMIC EDDY AI MASCOT ANIMATION --- */}
+                {isEddyActive && (
+                    <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end space-y-3 pointer-events-none animate-in slide-in-from-bottom-8 fade-in duration-500">
+                        <div className="bg-indigo-900/90 dark:bg-[#110826] border border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.4)] text-indigo-50 dark:text-purple-100 px-5 py-2.5 rounded-2xl rounded-br-sm text-sm font-medium flex items-center backdrop-blur-sm">
+                            <Icons.RefreshCw className="animate-spin mr-2 text-indigo-300 dark:text-fuchsia-400" style={{ width: 14, height: 14 }} />
+                            {eddyMessage}
+                        </div>
+                        <div className="relative w-24 h-24 drop-shadow-[0_0_25px_rgba(99,102,241,0.7)] animate-bounce" style={{ animationDuration: '2.5s' }}>
+                            <img src="data:image/png;base64,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" alt={brandConfig.industry || "AI Agent"} className="w-full h-full object-contain" onError={(e) => e.target.style.display = 'none'} />
+                        </div>
+                    </div>
+                )}
+
+            
