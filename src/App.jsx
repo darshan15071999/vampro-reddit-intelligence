@@ -1087,18 +1087,18 @@ const App = () => {
         let thisForum = 0;
         let thisOfficial = 0;
         if (scan.profileSurfaced) {
-           thisUser = scan.profileVisibilityScore || 50;
-           thisRedditOverall = Math.max(thisUser, scan.totalRedditSurfaceCount * 10);
+          thisUser = scan.profileVisibilityScore || 50;
+          thisRedditOverall = Math.max(thisUser, scan.totalRedditSurfaceCount * 10);
         } else if (scan.totalRedditSurfaceCount > 0) {
-           thisRedditOverall = scan.totalRedditSurfaceCount * 10;
+          thisRedditOverall = scan.totalRedditSurfaceCount * 10;
         }
         if (scan.sources) {
-           scan.sources.forEach(src => {
-             if (src.type === 'forum') thisForum += src.weight;
-             else if (src.type === 'reddit') thisRedditOverall = Math.max(thisRedditOverall, src.weight);
-             else if (src.type === 'docs') thisOfficial += src.weight;
-             else customDomainsAgg[src.domain] = (customDomainsAgg[src.domain] || 0) + src.weight;
-           });
+          scan.sources.forEach(src => {
+            if (src.type === 'forum') thisForum += src.weight;
+            else if (src.type === 'reddit') thisRedditOverall = Math.max(thisRedditOverall, src.weight);
+            else if (src.type === 'docs') thisOfficial += src.weight;
+            else customDomainsAgg[src.domain] = (customDomainsAgg[src.domain] || 0) + src.weight;
+          });
         }
         if (thisOfficial === 0 && thisRedditOverall === 0) thisOfficial = 100;
 
@@ -1106,11 +1106,11 @@ const App = () => {
         totalRedditOverall += thisRedditOverall;
         totalUser += thisUser;
         totalForum += thisForum;
-        
+
         if (thisUser > 0 && scan.surfacedPostUrl) {
-           const match = scan.surfacedPostUrl.match(/r\/([^\/]+)/);
-           const sub = match ? match[1] : 'general';
-           subredditMap[sub] = (subredditMap[sub] || 0) + thisUser;
+          const match = scan.surfacedPostUrl.match(/r\/([^\/]+)/);
+          const sub = match ? match[1] : 'general';
+          subredditMap[sub] = (subredditMap[sub] || 0) + thisUser;
         }
 
         timelineData.push({
@@ -1351,6 +1351,8 @@ const App = () => {
             </div>
             <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded">Waitlist</span>
           </button>
+
+          <text className="text-[10px] text-center text-gray-500/80 uppercase tracking-wider">Beta version can have inconsistencies, verify data manually till stable version is launched. Bug fixes are updated on a regular basis. In case of any issues feel free to reach out to support. </text>
 
         </nav>
         <div className="p-4 mt-auto border-t border-white/5 bg-black/10">
