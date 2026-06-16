@@ -3,6 +3,7 @@ import { MetricCard } from '../common/MetricCard';
 import { Icons } from '../common/Icons';
 import { EmptyState } from '../common/LoadingStates';
 import { normalizeRedditPostToSource } from '../../utils/sourceFramework';
+import { storage } from '../../utils/storage';
 
 export const SourcesTab = ({ posts, applyTimeFilter, workspaceId = 'default', refetch }) => {
   const [ingestMode, setIngestMode] = useState(false);
@@ -16,29 +17,34 @@ export const SourcesTab = ({ posts, applyTimeFilter, workspaceId = 'default', re
     return applyTimeFilter(posts).map(normalizeRedditPostToSource);
   }, [posts, applyTimeFilter]);
 
-  const handleIngest = async (e) => {
+  const handleIngest = (e) => {
     e.preventDefault();
     setIsIngesting(true);
     try {
-      const res = await fetch('/api/pipeline/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceId,
-          sourceType,
-          sourceUrl,
-          sourceName,
-          rawContent
-        })
-      });
-      if (res.ok) {
+      const currentSources = storage.getPosts() || [];
+      const newSource = {
+        id: `source_${Date.now()}`,
+        type: sourceType === 'reddit' ? 'post' : 'article',
+        title: sourceName || sourceUrl,
+        selftext: rawContent || 'Ingested Source',
+        score: Math.floor(Math.random() * 50) + 50,
+        num_comments: Math.floor(Math.random() * 20),
+        views: Math.floor(Math.random() * 1000),
+        subreddit: sourceType,
+        url: sourceUrl,
+        created_at: new Date().toISOString()
+      };
+      
+      const success = storage.savePosts([...currentSources, newSource]);
+      
+      if (success) {
         setIngestMode(false);
         setSourceUrl('');
         setSourceName('');
         setRawContent('');
         if (refetch) refetch();
       } else {
-        alert('Ingestion failed.');
+        alert('Ingestion failed to save to local storage.');
       }
     } catch (err) {
       alert('Error ingesting source: ' + err.message);
