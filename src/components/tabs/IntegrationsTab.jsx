@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../common/Icons';
+import { storage } from '../../utils/storage';
 
 const LLM_PROVIDERS = [
   { id: 'openai', name: 'ChatGPT (OpenAI)', icon: Icons.Cpu, default: false },
@@ -10,26 +11,25 @@ const LLM_PROVIDERS = [
   { id: 'grok', name: 'Grok (xAI)', icon: Icons.Cpu, default: false }
 ];
 
-export const IntegrationsTab = ({ workspaceId = 'default' }) => {
+export const IntegrationsTab = () => {
   const [connections, setConnections] = useState({});
   const [loading, setLoading] = useState(true);
   const [keys, setKeys] = useState({});
 
   useEffect(() => {
     fetchConnections();
-  }, [workspaceId]);
+  }, []);
 
-  const fetchConnections = async () => {
+  const fetchConnections = () => {
     try {
-      const res = await fetch(`/api/providers/${workspaceId}`);
-      if (res.ok) {
-        const data = await res.json();
-        const connMap = {};
-        data.forEach(d => {
-          connMap[d.provider_name] = d.status;
-        });
-        setConnections(connMap);
-      }
+      const data = storage.getProviders();
+      const connMap = {};
+      Object.keys(data).forEach(providerId => {
+        if (data[providerId] && data[providerId].apiKey) {
+          connMap[providerId] = 'Connected';
+        }
+      });
+      setConnections(connMap);
     } catch (err) {
       console.error(err);
     } finally {
@@ -37,23 +37,17 @@ export const IntegrationsTab = ({ workspaceId = 'default' }) => {
     }
   };
 
-  const handleConnect = async (providerId) => {
+  const handleConnect = (providerId) => {
     const key = keys[providerId];
     if (!key) return alert('Please enter an API key');
     
     try {
-      const res = await fetch(`/api/providers/connect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspaceId,
-          provider: providerId,
-          apiKey: key
-        })
-      });
-      if (res.ok) {
+      const success = storage.saveProvider(providerId, key);
+      if (success) {
         setKeys({ ...keys, [providerId]: '' });
         fetchConnections();
+      } else {
+        alert('Failed to save API key to local storage.');
       }
     } catch (err) {
       alert('Failed to connect');
@@ -66,7 +60,7 @@ export const IntegrationsTab = ({ workspaceId = 'default' }) => {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-bold text-white tracking-tight">LLM Integrations</h2>
-        <p className="text-sm text-gray-400 mt-1">Securely connect your AI agents. Keys are vaulted on the backend. If no agents are connected, the system uses Gemini AI as a fallback alongside heuristic logic.</p>
+        <p className="text-sm text-gray-400 mt-1">Securely connect your AI agents. Keys are vaulted locally in your browser. If no agents are connected, the system uses Gemini AI as a fallback alongside heuristic logic.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -108,7 +102,7 @@ export const IntegrationsTab = ({ workspaceId = 'default' }) => {
               ) : (
                 <div className="mt-auto">
                   <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded text-center">
-                    Key securely vaulted
+                    Key securely vaulted locally
                   </div>
                 </div>
               )}

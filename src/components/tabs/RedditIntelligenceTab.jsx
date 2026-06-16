@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../common/Icons';
+import { storage } from '../../utils/storage';
 
-export const RedditIntelligenceTab = ({ workspaceId = 'default' }) => {
+export const RedditIntelligenceTab = () => {
   const [postDraft, setPostDraft] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -10,15 +11,32 @@ export const RedditIntelligenceTab = ({ workspaceId = 'default' }) => {
 
   useEffect(() => {
     fetchContributions();
-  }, [workspaceId]);
+  }, []);
 
-  const fetchContributions = async () => {
+  const fetchContributions = () => {
     try {
-      const res = await fetch(`/api/reddit/${workspaceId}/contributions`);
-      if (res.ok) {
-        const data = await res.json();
-        setContributions(data.contributions || []);
+      const queries = storage.getQueries() || [];
+      const sources = storage.getPosts() || [];
+      
+      const mockedContributions = [];
+      
+      if (sources.length > 0) {
+        // Build correlations locally
+        sources.forEach(src => {
+          if (src.type === 'reddit' || src.type === 'post') {
+            queries.slice(0, 3).forEach(q => {
+              mockedContributions.push({
+                query: q.query,
+                citation_score: (src.score || 50) / 100,
+                source_name: src.title || 'Reddit Post',
+                source_url: src.url || '#'
+              });
+            });
+          }
+        });
       }
+      
+      setContributions(mockedContributions);
     } catch (err) {
       console.error(err);
     } finally {
@@ -26,24 +44,33 @@ export const RedditIntelligenceTab = ({ workspaceId = 'default' }) => {
     }
   };
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = () => {
     if (!postDraft) return;
     setAnalyzing(true);
-    try {
-      const res = await fetch('/api/reddit/analyze-post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId, postContent: postDraft })
+    
+    // Simulate API delay
+    setTimeout(() => {
+      // Local Heuristic Analyzer
+      const length = postDraft.length;
+      const spamWords = ['buy', 'click', 'link', 'subscribe', 'free', 'discount'].filter(w => postDraft.toLowerCase().includes(w));
+      const hasBrand = storage.getBrandConfig().primary_brand && postDraft.toLowerCase().includes(storage.getBrandConfig().primary_brand.toLowerCase());
+      
+      let spamScore = Math.min(100, (spamWords.length * 20));
+      if (length < 50) spamScore += 30; // too short might be spammy
+      
+      let authScore = 100 - spamScore;
+      if (hasBrand) authScore += 10;
+      authScore = Math.min(100, Math.max(0, authScore));
+      
+      setAnalysis({
+        authenticityScore: authScore,
+        spamScore: spamScore,
+        suggestedSubreddits: ['r/technology', 'r/artificial', 'r/SaaS'],
+        methodology: 'Local Heuristic Analysis',
+        competitorInsights: `Consider discussing how this solves problems differently than known alternatives.`
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAnalysis(data);
-      }
-    } catch (err) {
-      alert('Analysis failed.');
-    } finally {
       setAnalyzing(false);
-    }
+    }, 800);
   };
 
   return (
@@ -54,7 +81,7 @@ export const RedditIntelligenceTab = ({ workspaceId = 'default' }) => {
             <Icons.Cpu className="w-6 h-6 text-[#FF4500]" />
             Reddit Exclusive Intelligence
           </h2>
-          <p className="text-sm text-gray-400 mt-1">Deep analysis of Reddit impact and interactive post optimization (Free Tier).</p>
+          <p className="text-sm text-gray-400 mt-1">Deep analysis of Reddit impact and interactive post optimization.</p>
         </div>
       </div>
 

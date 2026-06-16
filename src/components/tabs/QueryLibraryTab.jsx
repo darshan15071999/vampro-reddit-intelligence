@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../common/Icons';
+import { storage } from '../../utils/storage';
 
-export const QueryLibraryTab = ({ workspaceId = 'default' }) => {
+export const QueryLibraryTab = () => {
   const [queries, setQueries] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchQueries = async () => {
+    const fetchQueries = () => {
       try {
-        const res = await fetch(`/api/setup/${workspaceId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setQueries(data.queries || []);
-        }
+        const data = storage.getQueries();
+        setQueries(data || []);
       } catch (err) {
         console.error('Failed to fetch queries', err);
       } finally {
@@ -20,7 +18,7 @@ export const QueryLibraryTab = ({ workspaceId = 'default' }) => {
       }
     };
     fetchQueries();
-  }, [workspaceId]);
+  }, []);
 
   if (loading) return <div className="text-white p-8">Loading Query Library...</div>;
 
@@ -53,8 +51,8 @@ export const QueryLibraryTab = ({ workspaceId = 'default' }) => {
               <div className="text-gray-500 text-sm italic">No {category.toLowerCase()} queries configured. Add them in Platform Setup.</div>
             ) : (
               <div className="space-y-3">
-                {qs.map(q => (
-                  <div key={q.id} className="bg-[#080B14] border border-white/5 rounded-xl p-4 flex justify-between items-center group hover:border-indigo-500/30 transition-colors">
+                {qs.map((q, idx) => (
+                  <div key={q.id || idx} className="bg-[#080B14] border border-white/5 rounded-xl p-4 flex justify-between items-center group hover:border-indigo-500/30 transition-colors">
                     <div>
                       <div className="text-sm font-medium text-white">{q.query}</div>
                       <div className="text-xs text-gray-500 mt-1">Intent: {q.intent}</div>

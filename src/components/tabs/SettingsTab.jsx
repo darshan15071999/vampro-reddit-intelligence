@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Icons } from '../common/Icons';
+import { storage } from '../../utils/storage';
 
-export const SettingsTab = ({ workspaceId = 'default' }) => {
+export const SettingsTab = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -20,30 +21,21 @@ export const SettingsTab = ({ workspaceId = 'default' }) => {
 
   useEffect(() => {
     fetchSetupData();
-  }, [workspaceId]);
+  }, []);
 
-  const fetchSetupData = async () => {
+  const fetchSetupData = () => {
     try {
-      const res = await fetch(`/api/setup/${workspaceId}`);
-      if (res.ok) {
-        const data = await res.json();
-        
-        let parsedProducts = {};
-        try { parsedProducts = JSON.parse(data.brand.tracked_products); } catch (e) {}
-        
-        let parsedKeywords = [];
-        try { parsedKeywords = JSON.parse(data.brand.tracked_keywords); } catch (e) {}
+      const config = storage.getBrandConfig();
+      setBrandData({
+        primary_brand: config.primary_brand || '',
+        industry: config.industry || '',
+        tracked_keywords: Array.isArray(config.tracked_keywords) ? config.tracked_keywords.join(', ') : '',
+        competitors: Array.isArray(config.competitors) ? config.competitors.join(', ') : '',
+        competitor_keywords: Array.isArray(config.competitor_keywords) ? config.competitor_keywords.join(', ') : ''
+      });
 
-        setBrandData({
-          primary_brand: data.brand.primary_brand || '',
-          industry: parsedProducts.industry || '',
-          tracked_keywords: Array.isArray(parsedKeywords) ? parsedKeywords.join(', ') : '',
-          competitors: Array.isArray(parsedProducts.competitors) ? parsedProducts.competitors.join(', ') : '',
-          competitor_keywords: Array.isArray(parsedProducts.competitor_keywords) ? parsedProducts.competitor_keywords.join(', ') : ''
-        });
-
-        setQueries(data.queries || []);
-      }
+      const savedQueries = storage.getQueries();
+      setQueries(savedQueries || []);
     } catch (err) {
       console.error('Failed to fetch setup data', err);
     } finally {
@@ -51,7 +43,7 @@ export const SettingsTab = ({ workspaceId = 'default' }) => {
     }
   };
 
-  const handleBrandSave = async (e) => {
+  const handleBrandSave = (e) => {
     e.preventDefault();
     setSaving(true);
     try {
@@ -59,47 +51,39 @@ export const SettingsTab = ({ workspaceId = 'default' }) => {
         primary_brand: brandData.primary_brand,
         industry: brandData.industry,
         tracked_keywords: brandData.tracked_keywords.split(',').map(k => k.trim()).filter(Boolean),
-        tracked_features: [], // Reserved for future use
+        tracked_features: [], 
         competitors: brandData.competitors.split(',').map(c => c.trim()).filter(Boolean),
         competitor_keywords: brandData.competitor_keywords.split(',').map(k => k.trim()).filter(Boolean)
       };
 
-      const res = await fetch(`/api/setup/${workspaceId}/brand`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
+      const success = storage.saveBrandConfig(payload);
+      if (success) {
         alert('Brand configuration saved successfully.');
       } else {
-        alert('Failed to save profile. Make sure the backend server is running.');
+        alert('Failed to save profile to local storage.');
       }
     } catch (err) {
-      alert('Error saving config. Is the backend server running?');
+      alert('Error saving config.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleAddQuery = async (e) => {
+  const handleAddQuery = (e) => {
     e.preventDefault();
     if (!newQuery.query) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/setup/${workspaceId}/queries`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newQuery)
-      });
-      if (res.ok) {
+      const success = storage.saveQuery(newQuery);
+      if (success) {
         setNewQuery({ query: '', intent: 'Informational', category: 'General', generation_method: 'Manual' });
         fetchSetupData(); // Refresh list
         alert('Query added successfully.');
       } else {
-        alert('Failed to add query. Make sure the backend server is running.');
+        alert('Failed to add query to local storage.');
       }
     } catch (err) {
-      alert('Error adding query. Is the backend server running?');
+      alert('Error adding query.');
     } finally {
       setSaving(false);
     }

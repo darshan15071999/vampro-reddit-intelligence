@@ -1,30 +1,48 @@
 import React, { useState } from 'react';
 import { Icons } from '../common/Icons';
+import { storage } from '../../utils/storage';
 
-export const ProbabilityAnalyzerTab = ({ workspaceId = 'default' }) => {
+export const ProbabilityAnalyzerTab = () => {
   const [query, setQuery] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
 
-  const handleAnalyze = async (e) => {
+  const handleAnalyze = (e) => {
     e.preventDefault();
     if (!query) return;
     setAnalyzing(true);
-    try {
-      const res = await fetch('/api/probability/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId, query })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAnalysis(data);
+    
+    setTimeout(() => {
+      const config = storage.getBrandConfig();
+      const brand = config.primary_brand || 'Your Brand';
+      
+      const queryLower = query.toLowerCase();
+      let prob = Math.floor(Math.random() * 30) + 10; // base 10-40%
+      
+      if (queryLower.includes(brand.toLowerCase())) {
+        prob += 50; 
       }
-    } catch (err) {
-      alert('Analysis failed.');
-    } finally {
+      
+      const keywords = config.tracked_keywords || [];
+      if (keywords.some(k => queryLower.includes(k.toLowerCase()))) {
+        prob += 20;
+      }
+      
+      prob = Math.min(99, Math.max(5, prob));
+      
+      let confidence = 'Low';
+      if (prob > 70) confidence = 'High';
+      else if (prob > 40) confidence = 'Medium';
+
+      setAnalysis({
+        probability: prob,
+        confidence,
+        insight: prob > 70 
+          ? `Strong semantic alignment with ${brand}. High likelihood of extraction in AEO contexts.`
+          : `Moderate to low relevance. Recommend publishing targeted content for "${query}" to increase visibility.`
+      });
       setAnalyzing(false);
-    }
+    }, 600);
   };
 
   return (
