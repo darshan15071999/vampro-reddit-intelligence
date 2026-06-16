@@ -64,14 +64,18 @@ export const SettingsTab = ({ workspaceId = 'default' }) => {
         competitor_keywords: brandData.competitor_keywords.split(',').map(k => k.trim()).filter(Boolean)
       };
 
-      await fetch(`/api/setup/${workspaceId}/brand`, {
+      const res = await fetch(`/api/setup/${workspaceId}/brand`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      alert('Brand configuration saved successfully.');
+      if (res.ok) {
+        alert('Brand configuration saved successfully.');
+      } else {
+        alert('Failed to save profile. Make sure the backend server is running.');
+      }
     } catch (err) {
-      alert('Error saving config.');
+      alert('Error saving config. Is the backend server running?');
     } finally {
       setSaving(false);
     }
@@ -90,9 +94,12 @@ export const SettingsTab = ({ workspaceId = 'default' }) => {
       if (res.ok) {
         setNewQuery({ query: '', intent: 'Informational', category: 'General', generation_method: 'Manual' });
         fetchSetupData(); // Refresh list
+        alert('Query added successfully.');
+      } else {
+        alert('Failed to add query. Make sure the backend server is running.');
       }
     } catch (err) {
-      alert('Error adding query.');
+      alert('Error adding query. Is the backend server running?');
     } finally {
       setSaving(false);
     }
