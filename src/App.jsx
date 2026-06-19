@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { cosineSimilarity, generateEmbedding } from './utils/aiClient';
+import { trackEvent } from './utils/telemetry';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAppStore } from './store/useAppStore';
+import { useRedditStore } from './store/useRedditStore';
 
 // --- GLOBAL SETTINGS ---
 const defaultApiKey = "";
@@ -98,10 +103,11 @@ function extractTopicsFromPosts(posts, brandKeywords = []) {
 }
 
 function calculateAvgLLMVisibility(post) {
-  const textLengthFactor = Math.min((post.selftext || "").length / 500, 1.5);
-  const engagementBase = Math.min(post.score * 1.5, 50);
-  const commentBase = Math.min(post.num_comments * 2, 30);
-  return Math.min(98, Math.max(2, Math.round((10 + engagementBase + commentBase) * (textLengthFactor < 0.5 ? 0.8 : textLengthFactor))));
+  if (!post.embedding) return 0;
+  const appStore = useAppStore.getState();
+  if (!appStore.brandConfigEmbedding) return 0;
+  const sim = cosineSimilarity(post.embedding, appStore.brandConfigEmbedding);
+  return Math.max(0, Math.round(sim * 100));
 }
 
 // --- ICONS ---
@@ -253,26 +259,20 @@ const fallbackDemoData = [
 ];
 
 const App = () => {
-  const [theme, setTheme] = useState('dark');
-  const [brandConfig, setBrandConfig] = useState({
-    primaryBrand: 'Your Brand',
-    industry: 'Tech',
-    competitors: ['Competitor A', 'Competitor B'],
-    keywords: ['keyword1', 'keyword2'],
-    searchTerms: ['search term 1', 'search term 2']
-  });
-  const [isBrandConfigSaved, setIsBrandConfigSaved] = useState(false);
-  const [isRedditIntelligenceExpanded, setIsRedditIntelligenceExpanded] = useState(true);
+  const { theme, setTheme } = useAppStore();
+  const { brandConfig, setBrandConfig } = useAppStore();
+  const { isBrandConfigSaved, setIsBrandConfigSaved } = useAppStore();
+  const { isRedditIntelligenceExpanded, setIsRedditIntelligenceExpanded } = useAppStore();
 
-  const [activeTab, setActiveTab] = useState('brand_setup');
-  const [profiles, setProfiles] = useState([]);
+  
+  const { profiles, setProfiles } = useRedditStore();
   const [newProfileInput, setNewProfileInput] = useState('');
-  const [username, setUsername] = useState('');
-  const [dataSource, setDataSource] = useState('manual');
-  const [manualJson, setManualJson] = useState('');
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { username, setUsername } = useRedditStore();
+  const { dataSource, setDataSource } = useRedditStore();
+  const { manualJson, setManualJson } = useRedditStore();
+  const { posts, setPosts } = useRedditStore();
+  const { loading, setLoading } = useRedditStore();
+  const { error, setError } = useRedditStore();
   const [isManualJsonOpen, setIsManualJsonOpen] = useState(false);
 
   // Custom Date Filters
@@ -330,12 +330,7 @@ const App = () => {
   const [newSourceType, setNewSourceType] = useState('brand');
   const [newSourceValue, setNewSourceValue] = useState('');
 
-  const [providers, setProviders] = useState([
-    { id: 'chatgpt', name: 'ChatGPT (OpenAI)', enabled: true, status: 'requires_key', apiKey: '', isCustom: true },
-    { id: 'perplexity', name: 'Perplexity AI', enabled: true, status: 'requires_key', apiKey: '', isCustom: true },
-    { id: 'claude', name: 'Claude (Anthropic)', enabled: false, status: 'requires_key', apiKey: '', isCustom: true },
-    { id: 'gemini', name: 'Gemini 2.5 (Built-in)', enabled: true, status: 'connected', apiKey: 'internal', isCustom: false }
-  ]);
+  const { providers, setProviders } = useAppStore();
   const [editingProviderId, setEditingProviderId] = useState(null);
   const [tempApiKey, setTempApiKey] = useState('');
   const [isExecutingQuery, setIsExecutingQuery] = useState(null);
@@ -358,7 +353,7 @@ const App = () => {
   const [liveSovData, setLiveSovData] = useState([]);
   const liveScanRef = useRef(null);
 
-  const [allProfilesPosts, setAllProfilesPosts] = useState({});
+  const { allProfilesPosts, setAllProfilesPosts } = useRedditStore();
 
   // --- Real MCP Orchestration State ---
   const wsRef = useRef(null);
@@ -427,67 +422,7 @@ const App = () => {
     return { text: sorted[0].text, rank: sorted[0].browserSearchRank ? `#${sorted[0].browserSearchRank}` : 'Page 1' };
   }, [savedQueries]);
 
-  const fetchRedditData = useCallback(async (isUserTriggered = false) => {
-    setLoading(true); setError(null);
-    if (dataSource === 'manual') {
-      try {
-        if (!manualJson.trim()) { if (isUserTriggered) throw new Error("No JSON provided."); else { setLoading(false); return; } }
-        const data = JSON.parse(manualJson);
-
-        let children = [];
-        if (data && data?.data?.children) {
-          children = data.data.children;
-        } else if (Array.isArray(data)) {
-          if (data[0] && data[0]?.data?.children) {
-            children = data.flatMap(d => d.data?.children || []);
-          } else {
-            children = data;
-          }
-        } else if (data && (data.kind === 't1' || data.kind === 't3')) {
-          children = [data];
-        }
-
-        if (children.length === 0) throw new Error("0 posts/comments or unrecognized format!");
-
-        const firstAuthor = children[0]?.data?.author || 'Manual_Profile';
-
-        setProfiles(prev => {
-          if (!prev.includes(firstAuthor)) {
-            return [...prev, firstAuthor];
-          }
-          return prev;
-        });
-        setUsername(prev => {
-          if (!prev || prev.trim() === '') return firstAuthor;
-          return prev;
-        });
-
-        setPosts(children.map(child => {
-          const itemData = child.data || child;
-          const kind = child.kind || (itemData.name && itemData.name.startsWith('t1_') ? 't1' : 't3');
-          const isComment = kind === 't1';
-          return {
-            id: itemData.id || Math.random().toString(),
-            type: isComment ? 'comment' : 'post',
-            title: isComment ? `Comment: ${itemData.link_title || 'Thread'}` : (itemData.title || 'Untitled'),
-            selftext: isComment ? itemData.body : (itemData.selftext || "No text available."),
-            score: itemData.score || 0,
-            num_comments: itemData.num_comments || 0,
-            views: itemData.view_count || Math.floor(Math.random() * 500) + ((itemData.score || 0) * 12),
-            subreddit: itemData.subreddit || "unknown",
-            url: itemData.permalink ? `https://reddit.com${itemData.permalink}` : '#',
-            created_utc: itemData.created_utc || (Date.now() / 1000)
-          }
-        }));
-      } catch (err) {
-        setError(err.message);
-        setProfiles(prev => prev.length === 0 ? ['Demo_Profile'] : prev);
-        setUsername(prev => !prev ? 'Demo_Profile' : prev);
-        setPosts(fallbackDemoData);
-      } finally { setLoading(false); }
-      return;
-    }
-  }, [username, dataSource, manualJson]);
+  const { fetchRedditData } = useRedditStore();
 
   useEffect(() => { fetchRedditData(false); }, [dataSource, username]);
 
@@ -504,6 +439,12 @@ const App = () => {
 
       const maxScore = analyzedMatches.length > 0 ? analyzedMatches[0].score : 0;
       const discoverability = Math.min(99, Math.round(maxScore * 100));
+      
+      trackEvent('query_tested', { 
+        query: queryInput, 
+        score: discoverability,
+        matches_found: analyzedMatches.length 
+      });
 
       let analysisText = "";
       if (analyzedMatches.length > 0) {
@@ -1184,19 +1125,33 @@ const App = () => {
     return { domains, subreddits, redditStats, timelineData, ecosystemStats };
   }, [liveSovData, queryHistory, sovViewMode, sovTimeRange, sovCustomDates, customSovDomains, showUserContribution]);
 
+  
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const navItems = [
-    { id: 'dashboard', label: 'Overview Dashboard', icon: Icons.Activity },
-    { id: 'search_monitor', label: 'AI Search Monitoring', icon: Icons.Target },
-    { id: 'sov_analysis', label: 'Share of Voice', icon: Icons.PieChart },
-    { id: 'subreddit_suggester', label: 'Subreddit Suggester', icon: Icons.PenTool },
-    { id: 'competitor_analyzer', label: 'Competitor Mentions', icon: Icons.Crosshair },
-    { id: 'spotlight', label: 'Feature Spotlight', icon: Icons.Star },
-    { id: 'analytics', label: 'Platform Citations', icon: Icons.BarChart },
-    { id: 'query', label: 'Query Tester', icon: Icons.Terminal },
-    { id: 'mcp_integration', label: 'MCP Connect & Observe', icon: Icons.Plug },
-    { id: 'posts', label: 'Indexed Posts', icon: Icons.Layers },
-    { id: 'settings', label: 'Architecture & Settings', icon: Icons.Settings }
+    { id: 'dashboard', label: 'Overview Dashboard', icon: Icons.Activity, path: '/dashboard' },
+    { id: 'search_monitor', label: 'AI Search Monitoring', icon: Icons.Target, path: '/monitor' },
+    { id: 'sov_analysis', label: 'Share of Voice', icon: Icons.PieChart, path: '/sov' },
+    { id: 'subreddit_suggester', label: 'Subreddit Suggester', icon: Icons.PenTool, path: '/suggester' },
+    { id: 'competitor_analyzer', label: 'Competitor Mentions', icon: Icons.Crosshair, path: '/competitors' },
+    { id: 'spotlight', label: 'Feature Spotlight', icon: Icons.Star, path: '/spotlight' },
+    { id: 'analytics', label: 'Platform Citations', icon: Icons.BarChart, path: '/analytics' },
+    { id: 'query', label: 'Query Tester', icon: Icons.Terminal, path: '/query' },
+    { id: 'mcp_integration', label: 'MCP Connect & Observe', icon: Icons.Plug, path: '/mcp' },
+    { id: 'posts', label: 'Indexed Posts', icon: Icons.Layers, path: '/posts' },
+    { id: 'settings', label: 'Architecture & Settings', icon: Icons.Settings, path: '/settings' }
   ];
+  
+  const activeTab = location.pathname === '/' ? 'brand_setup' : navItems.find(i => i.path === location.pathname)?.id || 'brand_setup';
+  const setActiveTab = (id) => {
+    if (id === 'brand_setup') navigate('/');
+    else {
+      const item = navItems.find(i => i.id === id);
+      if (item) navigate(item.path);
+    }
+  };
+
 
   let isSignalScopeActive = false;
   let signalMessage = "";
@@ -1466,103 +1421,7 @@ const App = () => {
               </div>
             ) : (
               <>
-                {activeTab === 'dashboard' && (
-                  <div className="space-y-8">
-                    {error && (
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center text-red-600 dark:text-red-400 text-sm shadow-sm">
-                        <Icons.Shield className="mr-3 flex-shrink-0" style={{ width: 20, height: 20 }} />
-                        <div><span className="font-medium">Notice:</span> {error}</div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap justify-end gap-3 items-center">
-                      {dashboardTimeRange === 'custom' && (
-                        <div className="flex items-center gap-2 bg-black/50 border border-white/10 rounded-lg px-3 shadow-inner h-10 animate-in fade-in slide-in-from-right-4 duration-300">
-                          <span className="text-xs text-gray-400">From</span>
-                          <input type="date" value={dashboardCustomDates.from} onChange={(e) => setDashboardCustomDates(prev => ({ ...prev, from: e.target.value }))} className={`bg-transparent text-sm text-white focus:outline-none`} style={{ colorScheme: theme }} />
-                          <span className="text-gray-600">-</span>
-                          <span className="text-xs text-gray-400">To</span>
-                          <input type="date" value={dashboardCustomDates.to} onChange={(e) => setDashboardCustomDates(prev => ({ ...prev, to: e.target.value }))} className={`bg-transparent text-sm text-white focus:outline-none`} style={{ colorScheme: theme }} />
-                        </div>
-                      )}
-                      <select value={dashboardTimeRange} onChange={(e) => setDashboardTimeRange(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-sm text-gray-300 focus:outline-none focus:border-indigo-500 shadow-inner h-10">
-                        <option value="7">Last 7 Days</option><option value="30">Last 30 Days</option><option value="90">Last 90 Days</option><option value="custom">Custom Range...</option><option value="all">All Time</option>
-                      </select>
-                    </div>
-
-                    {/* --- High-Level Dynamic Metrics --- */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-900/40 dark:to-black border border-indigo-200 dark:border-indigo-500/20 rounded-xl p-6 shadow-sm dark:shadow-lg relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity"><Icons.PieChart style={{ width: 80, height: 80 }} className="text-indigo-500 dark:text-indigo-400" /></div>
-                        <div className="relative z-10">
-                          <h4 className="text-indigo-600 dark:text-indigo-400 text-xs uppercase tracking-wider font-bold mb-2 flex items-center"><Icons.Activity className="mr-2" style={{ width: 16, height: 16 }} /> Live Ecosystem Share of Voice</h4>
-                          <div className="flex items-baseline gap-3">
-                            <p className={`text-5xl font-black text-slate-800 dark:text-white`}>{sovData.redditStats.overallPercentage.toFixed(1)}%</p>
-                            <span className="text-sm font-medium text-slate-500 dark:text-gray-400 mb-1">Reddit SOV</span>
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-gray-500 mt-3">Calculated dynamically against {sovData.domains.length} tracked competitor domains and forums.</p>
-                        </div>
-                      </div>
-
-                      <div className="bg-gradient-to-br from-fuchsia-50 to-white dark:from-fuchsia-900/40 dark:to-black border border-fuchsia-200 dark:border-fuchsia-500/20 rounded-xl p-6 shadow-sm dark:shadow-lg relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity"><Icons.Star style={{ width: 80, height: 80 }} className="text-fuchsia-500 dark:text-fuchsia-400" /></div>
-                        <div className="relative z-10">
-                          <h4 className="text-fuchsia-600 dark:text-fuchsia-400 text-xs uppercase tracking-wider font-bold mb-2 flex items-center"><Icons.Target className="mr-2" style={{ width: 16, height: 16 }} /> Top Ranked Keyword</h4>
-                          <div className="flex flex-col justify-center h-[48px]">
-                            {topRankingKeyword.text === "No successful queries yet" ? (
-                              <p className="text-xl font-medium text-slate-400 dark:text-gray-500 italic">No ranked queries discovered yet.</p>
-                            ) : (
-                              <>
-                                <p className={`text-2xl font-bold text-slate-800 dark:text-white truncate`} title={topRankingKeyword.text}>"{topRankingKeyword.text}"</p>
-                                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">Ranking: {topRankingKeyword.rank}</span>
-                              </>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-gray-500 mt-3">The query where " + (brandConfig.primaryBrand || "Your Brand") + " explicitly wins AI citation context.</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Icons.Layers style={{ width: 40, height: 40 }} className="text-indigo-500" /></div>
-                        <h4 className="text-gray-400 text-xs uppercase tracking-wider font-semibold mb-1">Posts Published</h4>
-                        <p className={`text-3xl font-bold text-white`}>{dashboardData.postsPublished}</p>
-                      </div>
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Icons.MessageSquare style={{ width: 40, height: 40 }} className="text-fuchsia-500" /></div>
-                        <h4 className="text-gray-400 text-xs uppercase tracking-wider font-semibold mb-1">Comments</h4>
-                        <p className={`text-3xl font-bold text-white`}>{dashboardData.commentsPublished}</p>
-                      </div>
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Icons.Eye style={{ width: 40, height: 40 }} className="text-blue-500" /></div>
-                        <h4 className="text-gray-400 text-xs uppercase tracking-wider font-semibold mb-1">Est. Views</h4>
-                        <p className={`text-3xl font-bold text-white`}>{dashboardData.totalViews.toLocaleString()}</p>
-                      </div>
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-5 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Icons.TrendingUp style={{ width: 40, height: 40 }} className="text-emerald-500" /></div>
-                        <h4 className="text-gray-400 text-xs uppercase tracking-wider font-semibold mb-1">Total Upvotes</h4>
-                        <p className={`text-3xl font-bold text-white`}>{dashboardData.totalUpvotes.toLocaleString()}</p>
-                      </div>
-                    </div>
-
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-6 flex flex-col">
-                      <div className="flex justify-between items-center mb-1">
-                        <h3 className={`font-semibold text-white flex items-center`}>
-                          <Icons.Activity className="mr-2 text-indigo-500" style={{ width: 18, height: 18 }} />
-                          Recent LLM Discoverability Trend
-                        </h3>
-                        <select value={dashboardContentType} onChange={(e) => setDashboardContentType(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-indigo-500 shadow-inner">
-                          <option value="all">Posts & Comments</option><option value="post">Posts Only</option><option value="comment">Comments Only</option>
-                        </select>
-                      </div>
-                      <p className="text-xs text-gray-500 mb-2">Attribution percentage score across the latest content.</p>
-                      <div className="w-full">
-                        {dashboardData.filteredCount === 0 ? <div className="h-[180px] flex items-center justify-center text-gray-600 text-sm">No data available.</div> : <LLMVisibilityTrendChart data={dashboardData.recentTrend} />}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {activeTab === 'dashboard' && <Dashboard />}
 
                 {/* 2. AI Search Monitoring */}
                 {activeTab === 'search_monitor' && (
